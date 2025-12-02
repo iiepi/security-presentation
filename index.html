@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hash Functions - Cyber Security Presentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- CORE VARIABLES --- */
+        :root {
+            --neon-green: #00ff41;
+            --dim-green: #008f11;
+            --bg-color: #050505;
+            --panel-bg: rgba(5, 10, 5, 0.95); /* Increased opacity to prevent bleed-through */
+            --border-color: rgba(0, 255, 65, 0.3);
+            --glow-strong: 0 0 20px rgba(0, 255, 65, 0.5);
+            --text-main: #e0e0e0;
+            --text-muted: #888;
+        }
+
+        /* --- RESET & BASE --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'JetBrains Mono', monospace;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            user-select: none;
+            perspective: 1000px;
+        }
+
+        /* --- BACKGROUND LAYERS --- */
+        #matrix-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+            opacity: 0.15;
+        }
+
+        .vignette {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 40%, #000 100%);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .scanlines {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 3px;
+            z-index: 2;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        /* --- SLIDE CONTAINER --- */
+        .presentation-container {
+            position: relative;
+            width: 100%; height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .slide {
+            position: absolute;
+            width: 85%; max-width: 1200px;
+            height: 80%; max-height: 800px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 50px rgba(0,0,0,0.9);
+            /* Removed default padding to handle scrollwrapper better */
+            padding: 0; 
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            transform: translateZ(-100px) translateY(30px) rotateX(5deg);
+            transition: all 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+            pointer-events: none;
+            backdrop-filter: blur(15px);
+            border-radius: 4px;
+            overflow: hidden; /* CRITICAL: Prevents overflow overlap */
+        }
+
+        .slide::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-green), transparent);
+            opacity: 0.5;
+            z-index: 2;
+        }
+
+        /* Z-Index Fix: Active slide is much higher than others */
+        .slide.active {
+            opacity: 1;
+            transform: translateZ(0) translateY(0) rotateX(0);
+            pointer-events: auto;
+            z-index: 100;
+        }
+
+        .slide.prev {
+            opacity: 0;
+            transform: translateX(-100%) scale(0.9) rotateY(15deg);
+            z-index: 10;
+        }
+
+        .slide.next {
+            opacity: 0;
+            transform: translateX(100%) scale(0.9) rotateY(-15deg);
+            z-index: 10;
+        }
+
+        /* --- CONTENT WRAPPER (Handles Inner Scroll/Layout) --- */
+        .slide-content-wrapper {
+            position: relative;
+            height: 100%;
+            width: 100%;
+            padding: 5rem 4rem 4rem 4rem; /* Top padding clears the header bar */
+            overflow-y: auto; /* Allows scrolling if content is too long */
+            scrollbar-width: thin;
+            scrollbar-color: var(--dim-green) transparent;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Custom scrollbar for Webkit */
+        .slide-content-wrapper::-webkit-scrollbar { width: 6px; }
+        .slide-content-wrapper::-webkit-scrollbar-track { background: transparent; }
+        .slide-content-wrapper::-webkit-scrollbar-thumb { background-color: var(--dim-green); border-radius: 3px; }
+
+        /* --- TYPOGRAPHY --- */
+        h1, h2, h3 {
+            font-family: 'Rajdhani', sans-serif;
+            text-transform: uppercase;
+            color: #fff;
+            margin-bottom: 1rem;
+            flex-shrink: 0;
+        }
+
+        h1 {
+            font-size: 5.5rem;
+            font-weight: 700;
+            color: var(--neon-green);
+            text-shadow: var(--glow-strong);
+            letter-spacing: 2px;
+            line-height: 0.9;
+        }
+
+        h2 {
+            font-size: 2.5rem;
+            color: #fff;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+            margin-bottom: 2rem;
+            display: inline-block;
+            min-height: 1.2em;
+        }
+
+        p, li {
+            font-size: 1.15rem;
+            line-height: 1.6;
+            color: #ddd;
+            margin-bottom: 1.2rem;
+            max-width: 95%;
+        }
+
+        .highlight {
+            color: var(--neon-green);
+            font-weight: 600;
+        }
+
+        ul { list-style: none; padding-left: 10px; }
+        li {
+            position: relative;
+            padding-left: 30px;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.4s ease-out;
+        }
+        li::before {
+            content: '>';
+            position: absolute;
+            left: 0;
+            color: var(--neon-green);
+            font-weight: bold;
+        }
+
+        .slide.active li:nth-child(1) { transition-delay: 0.3s; opacity: 1; transform: translateY(0); }
+        .slide.active li:nth-child(2) { transition-delay: 0.4s; opacity: 1; transform: translateY(0); }
+        .slide.active li:nth-child(3) { transition-delay: 0.5s; opacity: 1; transform: translateY(0); }
+        .slide.active li:nth-child(4) { transition-delay: 0.6s; opacity: 1; transform: translateY(0); }
+
+        /* --- COMPONENTS --- */
+        .header-bar {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            font-size: 0.75rem;
+            color: var(--dim-green);
+            letter-spacing: 1px;
+            border-bottom: 1px solid rgba(0,255,65,0.1);
+            background: rgba(0,20,0,0.3);
+            z-index: 10;
+        }
+
+        .code-box {
+            background: rgba(0,0,0,0.6);
+            border: 1px solid #333;
+            padding: 1.5rem;
+            border-left: 4px solid var(--neon-green);
+            font-family: 'JetBrains Mono', monospace;
+            color: #bbfebb;
+            margin: 2rem 0;
+            position: relative;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem; /* Reduced gap to prevent overlap */
+            margin-top: 1rem;
+            width: 100%;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 1.2rem;
+            transition: 0.3s;
+        }
+        .stat-card:hover {
+            border-color: var(--neon-green);
+            background: rgba(0,255,65,0.03);
+            transform: translateY(-2px);
+        }
+        .stat-status {
+            font-size: 0.7rem;
+            padding: 3px 8px;
+            border-radius: 2px;
+            float: right;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .danger { color: #ff3333; border: 1px solid #ff3333; }
+        .safe { color: var(--neon-green); border: 1px solid var(--neon-green); }
+
+        /* --- CONTROLS --- */
+        .controls {
+            position: fixed;
+            bottom: 30px;
+            right: 40px;
+            z-index: 200; /* Higher than slides */
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            background: rgba(0,0,0,0.8);
+            border: 1px solid var(--neon-green);
+            color: var(--neon-green);
+            padding: 10px 20px;
+            font-family: 'JetBrains Mono';
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+        }
+        .btn:hover { background: var(--neon-green); color: #000; }
+        .btn-icon { padding: 10px 14px; }
+
+        .progress-bar {
+            position: fixed;
+            bottom: 0; left: 0;
+            height: 4px;
+            background: var(--neon-green);
+            width: 0%;
+            transition: width 0.5s ease;
+            box-shadow: 0 -2px 10px rgba(0,255,65,0.5);
+            z-index: 200;
+        }
+
+        /* --- ANIMATIONS --- */
+        .glitch-text { animation: glitch 3s infinite alternate-reverse; }
+        @keyframes glitch {
+            0% { text-shadow: 2px 0 0 red, -2px 0 0 blue; }
+            95% { text-shadow: 2px 0 0 red, -2px 0 0 blue; }
+            96% { text-shadow: none; }
+            100% { text-shadow: none; }
+        }
+
+        @media (max-width: 900px) {
+            .slide { width: 95%; height: 85%; }
+            .slide-content-wrapper { padding: 4rem 2rem 2rem 2rem; }
+            h1 { font-size: 3.5rem; }
+            h2 { font-size: 2rem; }
+            .grid-2 { grid-template-columns: 1fr; gap: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="matrix-canvas"></canvas>
+    <div class="vignette"></div>
+    <div class="scanlines"></div>
+
+    <div class="presentation-container">
+
+        <!-- SLIDE 1: INTRO -->
+        <div class="slide active">
+            <div class="header-bar"><span>SECURE_BOOT_SEQ</span><span>ID: 8841A</span></div>
+            <div class="slide-content-wrapper" style="justify-content: center; align-items: center; text-align: center;">
+                <h3 style="color:var(--dim-green); letter-spacing:4px; font-size: 1rem;">CYBER SECURITY MODULE</h3>
+                <h1 class="glitch-text">HASH<br>FUNCTIONS</h1>
+                
+                <div style="margin-top: 3rem; padding: 1.5rem; border: 1px dashed var(--dim-green); background: rgba(0,0,0,0.4);">
+                    <p style="color: #666; font-size: 0.8rem; margin:0; text-transform: uppercase;">Authenticated Agents</p>
+                    <div style="font-size: 1.2rem; color: #fff; margin-top: 10px;">SAIF AHMED <span style="color:var(--dim-green)">//</span> MOHAMMED ADNAN</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 2: DEFINITION -->
+        <div class="slide">
+            <div class="header-bar"><span>02 // DEFINITION</span><span>CORE</span></div>
+            <div class="slide-content-wrapper">
+                <h2 class="scramble-target">What is a Hash Function?</h2>
+                <p>A mathematical algorithm that maps data of <span class="highlight">arbitrary size</span> to a bit string of a <span class="highlight">fixed size</span>.</p>
+                <div class="grid-2">
+                    <div style="background: rgba(0,0,0,0.4); padding: 1.5rem; border: 1px solid #333;">
+                        <div style="color: #888; font-size: 0.8rem; margin-bottom: 10px;">INPUT</div>
+                        <p style="margin:0; color:#fff;">"Hello World"</p>
+                        <p style="margin:0; color:#fff;">image.jpg (4MB)</p>
+                        <p style="margin:0; color:#fff;">Windows.iso (5GB)</p>
+                    </div>
+                    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                         <div style="font-size: 2rem; color: var(--neon-green);">➔</div>
+                         <div style="font-size: 0.8rem; color: var(--dim-green);">PROCESSING</div>
+                    </div>
+                </div>
+                <div class="code-box" style="text-align: center;">
+                    OUTPUT: 5e884898da28047151d0e56f8dc62927... (Fixed 256-bit)
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 3: PROPERTIES -->
+        <div class="slide">
+            <div class="header-bar"><span>03 // RULES</span><span>LOGIC</span></div>
+            <div class="slide-content-wrapper">
+                <h2 class="scramble-target">The Golden Rules</h2>
+                <p>To be cryptographically secure, the function must satisfy:</p>
+                <ul>
+                    <li><strong class="highlight">Deterministic:</strong> Same input = Same output. Always.</li>
+                    <li><strong class="highlight">Quick Computation:</strong> Must calculate efficiently.</li>
+                    <li><strong class="highlight">Pre-Image Resistance:</strong> Impossible to reverse (One-Way).</li>
+                    <li><strong class="highlight">Avalanche Effect:</strong> Small change in input = Huge change in output.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- SLIDE 4: ONE-WAY -->
+        <div class="slide">
+            <div class="header-bar"><span>04 // SECURITY</span><span>ONE-WAY</span></div>
+            <div class="slide-content-wrapper">
+                <h2 class="scramble-target">The One-Way Function</h2>
+                <p>Imagine a meat grinder. You can put a steak in and get ground beef.</p>
+                <div class="code-box">
+                    Steak ➔ <span class="highlight">Grinder</span> ➔ Ground Beef
+                </div>
+                <p>But you cannot put ground beef back in and turn it into a steak.</p>
+                <p>This is why hackers who steal hashed passwords cannot simply "read" them. They only see the result, not the original password.</p>
+            </div>
+        </div>
+
+        <!-- SLIDE 5: COLLISIONS -->
+        <div class="slide">
+            <div class="header-bar"><span>05 // VULNERABILITY</span><span>COLLISION</span></div>
+            <div class="slide-content-wrapper">
+                <h2 class="scramble-target">Collision Resistance</h2>
+                <p>A "Collision" occurs if two different files produce the same hash.</p>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin: 2rem 0; flex-wrap: wrap; gap: 10px;">
+                    <div style="border: 1px solid #444; padding: 1rem; flex: 1; min-width: 150px;">
+                        FILE_A.DOC <br> <small style="color:#666">Legit Contract</small>
+                    </div>
+                    <div style="color: #ff3333; font-weight: bold; padding: 0 10px;">≠</div>
+                    <div style="border: 1px solid #ff3333; padding: 1rem; flex: 1; min-width: 150px;">
+                        FILE_B.DOC <br> <small style="color:#ff8888">Malware</small>
+                    </div>
+                </div>
+                <p class="highlight" style="text-align: center;">IF HASH(A) == HASH(B) -> BROKEN</p>
+            </div>
+        </div>
+
+        <!-- SLIDE 6: ALGORITHMS -->
+        <div class="slide">
+            <div class="header-bar"><span>06 // ALGORITHMS</span><span>DB</span></div>
+            <div class="slide-content-wrapper">
+                <h2 class="scramble-target">Common Algorithms</h2>
+                <div class="grid-2">
+                    <div class="stat-card">
+                        <span class="stat-status danger">BROKEN</span>
+                        <h3 style="color:#fff; font-size: 1.2rem; margin:0;">MD5</h3>
+                        <p style="font-size: 0.9rem; margin-top: 10px;">Fast but insecure. Collisions found instantly.</p>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-status danger">UNSAFE</span>
+                        <h3 style="color:#fff; font-size: 1.2rem; margin:0;">SHA-1</h3>
+                        <p style="font-size: 0.9rem; margin-top: 10px;">Deprecated by Google/Microsoft. Do not use.</p>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-status safe">SECURE</span>
+                        <h3 style="color:#fff; font-size: 1.2rem; margin:0;">SHA-256</h3>
+                        <p style="font-size: 0.9rem; margin-top: 10px;">Standard for Bitcoin, SSL, and SSH.</p>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-status safe">SECURE</span>
+                        <h3 style="color:#fff; font-size: 1.2rem; margin:0;">SHA-3</h3>
+                        <p style="font-size: 0.9rem; margin-top: 10px;">Latest generation. Different architecture.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 7: SALTING -->
+        <div class="slide">
+            <div class="header-bar"><span>07 // AUTHENTICATION</span><span>SALT</span></div>
+            <div class="slide-content-wrapper">
+                <h2 class="scramble-target">Salting Passwords</h2>
+                <p>To defeat pre-computed "Rainbow Tables", we add random noise.</p>
+                <div class="code-box">
+                    let salt = randomBytes(16); // "x9#kL2..." <br>
+                    let dbEntry = Hash(password + salt);
+                </div>
+                <p>Now, even if two users have the password "123456", their hashes will be completely different because their salts are different.</p>
+            </div>
+        </div>
+
+        <!-- SLIDE 8: INTEGRITY -->
+        <div class="slide">
+            <div class="header-bar"><span>08 // INTEGRITY</span><span>CHECK</span></div>
+            <div class="slide-content-wrapper">
+                <h2 class="scramble-target">Integrity Checks</h2>
+                <p>How to ensure a downloaded file is not corrupted or hacked?</p>
+                <ol style="margin-left: 20px; color: #ccc; line-height: 1.8;">
+                    <li>Developer releases <strong>Software.zip</strong> + <strong>Hash</strong>.</li>
+                    <li>You download the zip file.</li>
+                    <li>You run a hash tool on your local copy.</li>
+                    <li>Compare your hash with the developer's hash.</li>
+                </ol>
+                <p style="margin-top: 1rem; color: var(--neon-green);">Match = Safe. | Mismatch = TAMPERED.</p>
+            </div>
+        </div>
+
+        <!-- SLIDE 9: DEMO -->
+        <div class="slide">
+            <div class="header-bar"><span>09 // DEMO</span><span>AVALANCHE</span></div>
+            <div class="slide-content-wrapper">
+                <h2 class="scramble-target">The Avalanche Effect</h2>
+                <p>Changing just ONE bit completely changes the hash.</p>
+                
+                <div style="margin-top: 2rem;">
+                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:#888;">
+                        <span>INPUT: "Fox"</span>
+                    </div>
+                    <div style="background:#111; color:var(--neon-green); padding:8px; font-family:monospace; margin-bottom: 1rem; overflow-x: auto;">
+                        DFCD3454BBEA788A751A696C24D97009...
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:#888;">
+                        <span>INPUT: "Fix" (Changed 'o' to 'i')</span>
+                    </div>
+                    <div style="background:#111; color:#ff5555; padding:8px; font-family:monospace; overflow-x: auto;">
+                        52167735398730948574109847109847...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 10: END -->
+        <div class="slide">
+            <div class="header-bar"><span>10 // END</span><span>LOGOUT</span></div>
+            <div class="slide-content-wrapper" style="justify-content:center; align-items:center; text-align:center;">
+                <h1 style="font-size: 4rem;">SESSION TERMINATED</h1>
+                <p style="color:var(--neon-green); animation: pulse 2s infinite; margin-top: 1rem;">THANK YOU FOR LISTENING</p>
+                
+                <div style="margin-top: 3rem; border-top: 1px solid #333; padding-top: 2rem; width: 100%; max-width: 400px;">
+                    <p style="font-size: 0.9rem; color: #666;">QUESTIONS?</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="progress-bar" id="progressBar"></div>
+
+    <div class="controls">
+        <button class="btn btn-icon" onclick="toggleFullScreen()" title="Toggle Fullscreen">⛶</button>
+        <button class="btn" onclick="changeSlide(-1)">PREV</button>
+        <button class="btn" onclick="changeSlide(1)">NEXT</button>
+    </div>
+
+    <script>
+        /* --- TEXT SCRAMBLE EFFECT --- */
+        class TextScramble {
+            constructor(el) {
+                this.el = el;
+                this.chars = '!<>-_\\/[]{}—=+*^?#________';
+                this.update = this.update.bind(this);
+            }
+            setText(newText) {
+                const oldText = this.el.innerText;
+                const length = Math.max(oldText.length, newText.length);
+                const promise = new Promise((resolve) => this.resolve = resolve);
+                this.queue = [];
+                for (let i = 0; i < length; i++) {
+                    const from = oldText[i] || '';
+                    const to = newText[i] || '';
+                    const start = Math.floor(Math.random() * 40);
+                    const end = start + Math.floor(Math.random() * 40);
+                    this.queue.push({ from, to, start, end });
+                }
+                cancelAnimationFrame(this.frameRequest);
+                this.frame = 0;
+                this.update();
+                return promise;
+            }
+            update() {
+                let output = '';
+                let complete = 0;
+                for (let i = 0, n = this.queue.length; i < n; i++) {
+                    let { from, to, start, end, char } = this.queue[i];
+                    if (this.frame >= end) {
+                        complete++;
+                        output += to;
+                    } else if (this.frame >= start) {
+                        if (!char || Math.random() < 0.28) {
+                            char = this.randomChar();
+                            this.queue[i].char = char;
+                        }
+                        output += `<span style="color:#555">${char}</span>`;
+                    } else {
+                        output += from;
+                    }
+                }
+                this.el.innerHTML = output;
+                if (complete === this.queue.length) {
+                    this.resolve();
+                } else {
+                    this.frameRequest = requestAnimationFrame(this.update);
+                    this.frame++;
+                }
+            }
+            randomChar() {
+                return this.chars[Math.floor(Math.random() * this.chars.length)];
+            }
+        }
+
+        /* --- STATE MANAGEMENT --- */
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const progressBar = document.getElementById('progressBar');
+        const totalSlides = slides.length;
+
+        // Init scramble effects
+        const scramblers = [];
+        slides.forEach(slide => {
+            const header = slide.querySelector('.scramble-target');
+            if(header) {
+                // Store original text
+                header.dataset.originalText = header.innerText;
+                scramblers.push({ el: header, instance: new TextScramble(header) });
+            }
+        });
+
+        function changeSlide(dir) {
+            const next = currentSlide + dir;
+            if (next >= 0 && next < totalSlides) {
+                currentSlide = next;
+                updateVisuals();
+            }
+        }
+
+        function updateVisuals() {
+            // Update Classes
+            slides.forEach((slide, idx) => {
+                slide.classList.remove('active', 'prev', 'next');
+                if (idx === currentSlide) slide.classList.add('active');
+                else if (idx < currentSlide) slide.classList.add('prev');
+                else slide.classList.add('next');
+            });
+
+            // Update Progress
+            const pct = ((currentSlide + 1) / totalSlides) * 100;
+            progressBar.style.width = pct + '%';
+
+            // Trigger Scramble Effect
+            const activeSlide = slides[currentSlide];
+            const header = activeSlide.querySelector('.scramble-target');
+            if (header) {
+                const scrambler = scramblers.find(s => s.el === header);
+                if (scrambler) {
+                    scrambler.instance.setText(header.dataset.originalText);
+                }
+            }
+        }
+
+        /* --- FULLSCREEN --- */
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(e => console.log(e));
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        }
+
+        /* --- INPUTS --- */
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') changeSlide(1);
+            if (e.key === 'ArrowLeft') changeSlide(-1);
+            if (e.key.toLowerCase() === 'f') toggleFullScreen();
+        });
+
+        // Swipe Support
+        let ts = 0;
+        document.addEventListener('touchstart', e => ts = e.changedTouches[0].clientX, {passive: true});
+        document.addEventListener('touchend', e => {
+            let te = e.changedTouches[0].clientX;
+            if (ts - te > 50) changeSlide(1);
+            if (te - ts > 50) changeSlide(-1);
+        }, {passive: true});
+
+        /* --- MATRIX BACKGROUND --- */
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        const drops = [];
+        const chars = "01"; 
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            const cols = Math.floor(width / 20);
+            drops.length = 0;
+            for(let i=0; i<cols; i++) drops[i] = Math.random() * -50;
+        }
+
+        function draw() {
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#0F0';
+            ctx.font = '15px monospace';
+            
+            for(let i=0; i<drops.length; i++) {
+                const text = chars[Math.floor(Math.random()*chars.length)];
+                ctx.fillText(text, i*20, drops[i]*20);
+                if(drops[i]*20 > height && Math.random() > 0.98) drops[i] = 0;
+                drops[i]++;
+            }
+            requestAnimationFrame(draw);
+        }
+
+        // Debounce Resize
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(resize, 200);
+        });
+
+        // Init
+        resize();
+        requestAnimationFrame(draw);
+        updateVisuals(); // Set initial state
+    </script>
+</body>
+</html>
